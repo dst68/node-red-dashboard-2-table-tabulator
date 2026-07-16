@@ -47,7 +47,6 @@ export default {
 			tblDivId:		"",		// Optional, allows table instantiation on a specified Div
 			tblName:		"",		// Table alias, either the node name (if defined) else node id
 			rowIdField:		"id",	// The name of the field which holds the unique row Id (the default is 'id', but can be overridden)
-			silentCellUpdate:false,  // Flag for allowing silent cell update without sending a 'cellEdited' notification
 
 			origTblConfig:	null,	// original table configuration, as configured in the node (converted from JSON to an object). null=no table config in the node
 			origTblFuncs:	null,	// Original the custom functions configured in the node (converted from text to an object). null=no functions
@@ -155,8 +154,8 @@ export default {
     },
 // ******************************************************************************************************************************************
     methods: {
-        //  widget-send just sends a msg to Node-RED, it does not store the msg state server-side
-        //  alternatively, you can use widget-change, which will also automatically store the msg in the Node's datastore
+        //  'widget-send' just sends a msg to Node-RED, it does not store the msg state server-side
+        //  as opposed to 'widget-change', which will also automatically stores the msg in the Node's datastore
 		sendNotification(msg) {
 			msg.tbName = this.tblName;
 			//this.$socket.emit('widget-send', this.id, msg)
@@ -674,16 +673,6 @@ return new Promise((resolve, reject) => {
 			if (cfg.hasOwnProperty("index"))	// overriding the default 'id' field as the row identifier
 				vThis.rowIdField = cfg.index;
 
-			// Set notifications for the selected events 
-			setEventNotifications(vThis);
-
-			if (vThis.props.events.includes("tableBuilt"))	// if 'tableBuilt' is explicitely specified in the notification list, send the notification from here
-			{
-				let eventMsg = new tbEventMsg("tableBuilt");
-				eventMsg.payload = "Table built and ready";
-				vThis.sendNotification(eventMsg);
-			}
-
 			vThis.activeTblConfig = cloneObj(cfg);
 			delete vThis.activeTblConfig.data;
 			vThis.activeTblFuncs = cloneObj(activeFuncs);
@@ -695,6 +684,19 @@ return new Promise((resolve, reject) => {
 			}
 			else
 				vThis.tblStyleMap = null;
+
+			// Set notifications for the selected events 
+			setEventNotifications(vThis);
+
+			if (vThis.props.events.includes("tableBuilt"))	// if 'tableBuilt' is explicitely specified in the notification list, send the notification from here
+			{
+				let eventMsg = new tbEventMsg("tableBuilt");
+				eventMsg.payload = "Table built and ready";
+				if (vThis.activeTblFuncs?.hasOwnProperty("tableBuilt"+"EventHandler"))
+					callEventHandler(vThis.activeTblFuncs["tableBuilt"+"EventHandler"],{},eventMsg,vThis.tbl,vThis.sendNotification);
+				else
+					vThis.sendNotification(eventMsg);
+			}
 
 			vThis.tblReady = true;
 			console.log("Table "+ vThis.tblName + " built and ready");
@@ -719,6 +721,17 @@ function destroyTable(vThis)
 
 	if (vThis.tbl)
 	{
+		if (vThis.props.events.includes("tablePreDestroy"))
+		{
+			const eventMsg = new tbEventMsg("tablePreDestroy");
+			if (vThis.activeTblFuncs?.hasOwnProperty("tablePreDestroyEventHandler"))
+				callEventHandler(vThis.activeTblFuncs["tablePreDestroyEventHandler"],{},eventMsg,vThis.tbl,vThis.sendNotification);
+			else
+			{
+				eventMsg.payload = vThis.tbl.getData();
+				vThis.sendNotification(eventMsg);
+			}
+		}
 		vThis.tbl.clearData();
 		vThis.tbl.destroy();
 		console.log("Table "+vThis.tblName+": Table destroyed");
@@ -1098,33 +1111,36 @@ function setGroupBy(msg,vThis)
 // ********************************************************************************************************************
 function cellEditSync(msg,vThis)
 {
-/*  
-	// old implementation - does not support nested data
-	let data = {};
-	data[msg.payload.idField] = msg.payload.rowId;
-	data[msg.payload.field]   = msg.payload.value;
-
-	vThis.tbl.updateData([data])
-		.then((resolveVal)=>{ debugLog("Updated cell. resolve value=",resolveVal)})
-		.catch((err)=>{
-			console.error("Table "+vThis.tblName+": Cell-edit sync failed:",err.message)
-		});
-*/
 	debugLog("processing sync message from cell-edit in another client");
 
+/* creating an object from dot notation 
+	const parts = msg.payload.field.split(".");
+	const updateObj = parts.reduceRight((acc, key) => ({ [key]: acc }), msg.payload.value);
+*/
+/*  v0.82 implementation - updating via the cell component - supports nested cells, includes a flag to avoid 'cellEdited' notification
 	const rowComponent = vThis.tbl.getRow(msg.payload.rowId);
 	const cellComponent = rowComponent.getCell(msg.payload.field);
 
 	vThis.silentCellUpdate = true; // suppress "cellEdit" notification. will be reset back in the event callback
 	cellComponent.setValue(msg.payload.value);
+*/	
+	// cell should be flat, even if column is nested
+	// will not send a "cellEdited" notification since we use "updateRow" and not "cellComponent.setValue" 
+	const dataObj = {[msg.payload.field]: msg.payload.value};
+	vThis.tbl.updateRow(msg.payload.rowId,dataObj)
+		.then((resolveVal)=>{ debugLog("Updated cell. resolve value=",resolveVal)})
+		.catch((err)=>{
+			console.error("Table "+vThis.tblName+": Cell-edit sync failed:",err.message)
+		});
 
 	// Not sending a response msg to the flow, since this is an internal sync message
 }
 // ********************************************************************************************************************
 function setEventNotifications(vThis)
 {
-	let eventStr = vThis.props.events;
-	let eventArr = eventStr.split(',');
+	const eventHandlerSuffix = "EventHandler";
+	const eventStr = vThis.props.events;
+	const eventArr = eventStr.split(',');
 	
 	// If required, force cell-edit notifications
 	if (!vThis.props.events.includes("cellEdited") && !vThis.props.multiUser)
@@ -1132,27 +1148,35 @@ function setEventNotifications(vThis)
 
 	for (let i = 0 ; i < eventArr.length ; i++)
 	{
-		let ev = eventArr[i].trim();
+		const ev = eventArr[i].trim();
 		if (!ev)
 			continue;
+		
 		switch (ev)
 		{
 		//-------------------------------------------------------
 		// Table events
 		//-------------------------------------------------------
 			case "tableBuilt":	// Listener is set automatically during createTable(). If also explicitly requested in the events list, it will issue the notification from there
+			case "tablePreDestroy": // internal event, generated by the node when the table is about to be destroyed (within "destroyTable"), to allow data query, save & cleanup
 				break;
 			case "tableDestroyed":  // Sent *after* table is destroyed
 				vThis.tbl.on(ev, function(){
 					const eventMsg = new tbEventMsg(ev);
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 			case "dataChanged":
 				vThis.tbl.on(ev, function(data){
 					const eventMsg = new tbEventMsg(ev);
 					eventMsg.payload = data;
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{data:data},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 			case "columnMoved":
@@ -1164,22 +1188,12 @@ function setEventNotifications(vThis)
 						movedColumn: column.getField(),
 						newColumnOrder:fields
 					};
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{column:column,colArr:colArr},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
-/*
-			case "dataFiltered":
-				vThis.tbl.on(ev, function(filters,rows){	// filters - array of filters currently applied, rows = array of row components which pass the filters
-					let filteredData = new Array(rows.length)
-					for (let i = 0 ; i < rows.length ; i++)
-						filteredData[i] = rows[i].getData();
-
-					const eventMsg = new tbEventMsg(ev);
-					eventMsg.payload = { filteredData: filteredData };
-					vThis.sendNotification(eventMsg);
-				});
-				break;
-*/				
 		//-------------------------------------------------------
 		// Row events
 		//-------------------------------------------------------
@@ -1188,9 +1202,12 @@ function setEventNotifications(vThis)
 			case "rowTap":
 			case "rowDblTap":
 			case "rowTapHold":
-				vThis.tbl.on(ev, function(evObj,row){	// row = row component
+				vThis.tbl.on(ev, function(e,row){	// e = event object, row = row component
 					const eventMsg = rowEventMsg(row,ev);
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{e:e,row:row},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 			case "rowAdded":  	// sent upon addRow, updateOrAddRow, addData or updateOrAddData
@@ -1203,7 +1220,10 @@ function setEventNotifications(vThis)
 			case "rowMoveCancelled": // event is triggered when a row has been moved but has not changed position in the table
 				vThis.tbl.on(ev, function(row){	// row = row component
 					const eventMsg = rowEventMsg(row,ev);
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{row:row},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 		//-------------------------------------------------------
@@ -1211,10 +1231,6 @@ function setEventNotifications(vThis)
 		//-------------------------------------------------------
 			case "cellEdited":
 				vThis.tbl.on(ev, function(cell)	{  // cell = cell component
-					if (vThis.silentCellUpdate)  {		// flag was set to true prior to a programmatic cell update (cellComponent.setValue() )
-						vThis.silentCellUpdate = false; // reset to normal
-						return;
-					}
 					const eventMsg = new tbEventMsg(ev);
 					
 					const row = cell.getRow();
@@ -1226,12 +1242,18 @@ function setEventNotifications(vThis)
 					
 					if (vThis.props.events.includes("cellEdited"))	// Event is registered for notifications
 					{
+						let oldValue = cell.getOldValue();
+						if (oldValue === undefined)
+							oldValue = null;
 						eventMsg.payload =   {
 							[rowIdField]: rowId,
 							field:    field,
 							newValue: value,
-							oldValue: cell.getOldValue()
+							oldValue: oldValue
 						}
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{cell:cell},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
 						vThis.sendNotification(eventMsg);
 					}
 					// if not multi-user, send client sync notification
@@ -1252,7 +1274,10 @@ function setEventNotifications(vThis)
 			case "cellEditCancelled":
 				vThis.tbl.on(ev, function(cell){	// cell = cell component
 					const eventMsg = cellEventMsg(cell,ev);
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{cell:cell},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 			case "cellClick":
@@ -1262,7 +1287,10 @@ function setEventNotifications(vThis)
 			case "cellTapHold":
 				vThis.tbl.on(ev, function(e,cell){	// e = mouse event, cell = cell component
 					const eventMsg = cellEventMsg(cell,ev);
-					vThis.sendNotification(eventMsg);
+					if (vThis.activeTblFuncs?.hasOwnProperty(ev+eventHandlerSuffix))
+						callEventHandler(vThis.activeTblFuncs[ev+eventHandlerSuffix],{e:e,cell:cell},eventMsg,vThis.tbl,vThis.sendNotification);
+					else
+						vThis.sendNotification(eventMsg);
 				});
 				break;
 			default:
@@ -1271,6 +1299,16 @@ function setEventNotifications(vThis)
 		}
 		debugLog("Table "+vThis.tblName+": Set '"+ev+"' notifications");
 	}
+}
+function callEventHandler(funcObj,tbArgs,eventMsg,tblObj,sendFunc)
+{
+	const f = createFunc(funcObj);
+	if (typeof f !== "function")
+	{
+		console.warn("Invalid custom event handler for "+ev);
+		return;
+	}
+	f(tbArgs, eventMsg, tblObj, sendFunc);
 }
 function rowEventMsg(row,ev)
 {

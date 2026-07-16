@@ -252,26 +252,28 @@ module.exports = function (RED) {
 		{
 			const urlRegex = new RegExp('^@URL:','i');
 			if (urlRegex.test(filename))  // deprecated: fetch from URL
-				console.error("Fetching CSS file from a URL is now deprecated");
+				console.warn("Fetching CSS files from a URL is now deprecated");
 			else
 			{
-				const fs = require('fs');
 				const cssPrefix = "@CSS:";
 				const cssRegex = new RegExp('^'+cssPrefix,'i');
 				if (cssRegex.test(filename))	// take from tabulator CSS directory
 				{
-					// __dirname = location of this file = <NR home dir>/node_modules/@omrid01/node-red-dashboard-2-table-tabulator/nodes
-					// Tabulator CSS dir = <NR home dir>/node_modules/tabulator-tables/dist/css
+					filename = filename.slice(cssPrefix.length);
 					
-					const cssDir =  __dirname + "/../../../tabulator-tables/dist/css/";
-					filename = cssDir + filename.slice(cssPrefix.length);
-				}
-				try	{
-					config.themeCSS = fs.readFileSync(filename,"utf8");
-					console.log("ui-tabulator: CSS file read successfully, length=",config.themeCSS.length);
-				}
-				catch (err)	{
-					console.error("Cannot read CSS file: ",err);
+					// find the tabulator location, e.g. C:\Dev\Node-red\node_modules\tabulator-tables\dist\js\tabulator.js
+					const fs = require('node:fs');
+					const path = require("node:path");
+					const tabulatorFile = require.resolve('tabulator-tables');
+					const cssFile = path.join(path.dirname(tabulatorFile), '..', 'css',filename);
+
+					try	{
+						config.themeCSS = fs.readFileSync(cssFile,"utf8");
+						console.log("ui-tabulator: CSS file read successfully, length=",config.themeCSS.length);
+					}
+					catch (err)	{
+						console.warn("Cannot read CSS file: ",err);
+					}
 				}
 			}
 		}

@@ -550,7 +550,7 @@
         "themeFile": "@CSS:tabulator_midnight.min.css",
         "tblDivId": "",
         "width": "9",
-        "height": "3",
+        "height": "4",
         "x": 640,
         "y": 120,
         "wires": [
@@ -1335,7 +1335,7 @@
         "ui": "b7fd8a2cce8052cc",
         "path": "/tabulator",
         "icon": "table",
-        "layout": "grid",
+        "layout": "flex",
         "theme": "b7b1935fbb33bbc8",
         "breakpoints": [
             {
@@ -1359,7 +1359,7 @@
                 "cols": "12"
             }
         ],
-        "order": 1,
+        "order": 3,
         "className": "",
         "visible": "true",
         "disabled": "false"
@@ -1370,12 +1370,13 @@
         "name": "ui-tabulator Example",
         "page": "561dc2b9ba26313a",
         "width": "12",
-        "height": "1",
+        "height": "4",
         "order": 1,
         "showTitle": true,
         "className": "grp-name",
         "visible": "true",
-        "disabled": "false"
+        "disabled": "false",
+        "groupType": "default"
     },
     {
         "id": "0a0b551baac1511a",
@@ -1394,17 +1395,25 @@
     {
         "id": "b7fd8a2cce8052cc",
         "type": "ui-base",
-        "name": "ui7",
+        "name": "ui",
         "path": "/dashboard",
+        "appIcon": "",
         "includeClientData": true,
         "acceptsClientConfig": [
             "ui-notification",
             "ui-dropdown",
-            "ui-control"
+            "ui-control",
+            "ui-text",
+            "ui-text-input"
         ],
         "showPathInSidebar": false,
+        "headerContent": "page",
         "navigationStyle": "default",
-        "titleBarStyle": "default"
+        "titleBarStyle": "default",
+        "showReconnectNotification": true,
+        "notificationDisplayTime": 5,
+        "showDisconnectNotification": true,
+        "allowInstall": true
     },
     {
         "id": "b7b1935fbb33bbc8",
@@ -1455,9 +1464,18 @@
                 "cols": "12"
             }
         ],
-        "order": 7,
+        "order": 8,
         "className": "",
-        "visible": "true",
-        "disabled": "false"
+        "visible": true,
+        "disabled": false
+    },
+    {
+        "id": "324f3c6d087566f9",
+        "type": "global-config",
+        "env": [],
+        "modules": {
+            "@flowfuse/node-red-dashboard": "1.30.2",
+            "@omrid01/node-red-dashboard-2-table-tabulator": "0.9.0"
+        }
     }
 ]

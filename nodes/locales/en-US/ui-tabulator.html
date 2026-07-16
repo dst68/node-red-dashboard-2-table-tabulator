@@ -332,15 +332,30 @@ For example:
     },
    _msgid:"6d9d7a97666f2783"
 }</code></pre>
+<p><i><b>User-Defined Event Notifications</b></i></p>
+<p>The user can override the pre-defined event notifications, and assign custom event handlers. For example, overriding the <code>tablePreDestroy</code> event to query and act upon table data before it goes away.</p>
+<p>Custom event handlers are defined as functions named &LT;event&GT;+"EventHandler" (e.g. <code>cellDblClickEventHandler</code>), in the <b>Custom Functions</b> area. The function has 4 arguments:
+<ul>
+<li><b>tbArgs</b>: an object with the original event arguments from Tabulator. You can work with them inside the custom handler, but never send them out in a message.</li>
+<li><b>eventMsg</b>: the original notification object, which you can modify and enrich.</li>
+<li><b>tblObj</b>: a reference to the Tabulator object, allowing you to call Tabulator API directly (e.g. <code>tblObj.getData()</code> ).</li>
+<li><b>sendFunc</b>: a function for sending message objects to the node's output port.</li>
+</ul>
+Example:
+<pre><code>function cellClickEventHandler(tbArgs, eventMsg, tblObj, sendFunc)
+{
+   eventMsg.ClickTime = Date.now();
+   sendFunc(eventMsg);
+}</code></pre></p>
 <p><i><b>Supported Events</b></i>
 <ul>
-<li><b>Table Creation</b><pre><code>tableBuilt, tableDestroyed</code></pre></li>
+<li><b>Table Creation</b><pre><code>tableBuilt, tablePreDestroy, tableDestroyed</code></pre></li>
 <li><b>UI Interaction</b><pre><code>rowClick, rowDblClick, rowTap, rowDblTap, rowTapHold, rowSelected, rowDeselected, rowMoving, rowMoved, rowMoveCancelled, columnMoved, cellClick, cellDblClick, cellTap, cellDblTap, cellTapHold</code></pre></li>
 <li><b>Cell Change (by user in-cell editing) </b><pre><code>cellEditing, cellEdited, cellEditCancelled</code></pre></li>
 <li><b>Data Change</b><pre><code>rowAdded, rowUpdated, rowDeleted, dataChanged</code></pre></li>
 </ul>
 </p>
-<p><b><u>Note</u>:</b>, UI interaction notifications (e.g. <code>cellClick</code>), are triggered once from their client. However, notifications triggered by table-creation &amp; data-change commands (e.g. <code>rowAdded</code> notification following an <code>addRow</code> command) will be sent for each table instance (i.e. from each client)</p>
+<p><b><u>Note</u>:</b>, UI interaction notifications (e.g. <code>cellClick</code>), are triggered once from their client. However, notifications triggered by table-creation &amp; data-change commands (e.g. <code>rowAdded</code> notification will be sent by each table instance (i.e. from each client)</p>
 
 <h3>Working in Multi-Client Environment</h3>
 

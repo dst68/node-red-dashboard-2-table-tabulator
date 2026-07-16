@@ -1,6 +1,6 @@
 {
     "name": "@omrid01/node-red-dashboard-2-table-tabulator",
-    "version": "0.8.2",
+    "version": "0.9.0",
     "description": "Table node, using Tabulator-tables package, for Node-RED Dashboard 2.0",
     "keywords": [
         "node-red",
@@ -46,8 +46,8 @@
     },
     "dependencies": {
 		"luxon": "^3.7.1",
-        "tabulator-tables": "^6.3.1",
-        "vue": "^3.3.8",
+        "tabulator-tables": "^6.5.2",
+        "vue": "^3.5.3",
         "vuex": "^4.1.0"
     },
     "devDependencies": {

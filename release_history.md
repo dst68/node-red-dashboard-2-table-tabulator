@@ -1,5 +1,16 @@
 # ui-tabulator Release History
 
+## v0.9.0, 16-July-2026
+
+* Add a node-generated event (**tablePreDestroy**), fired just before the table is destroyed, to allow querying and acting upon table data before it goes away.
+* Introduce user-defined event handlers & notifications
+* In-cell editing from the UI:
+	* Editing cells of type **object** is not supported 
+	* When updating a cell which had no previous value, force an **oldValue** property (with null) into the notification
+	* Internal code improvements on **cellEdited** notifications
+* Update dependencies (most importantly: tabulator v6.5.2, which includes a timestamp handling fix)
+* Dynamically resolve the location of the active tabulator installation, in case of multiple installed versions
+
 ## v0.8.2, 26-July-2025
 
 * Add support for hierarchical data (dot-notated column names)
